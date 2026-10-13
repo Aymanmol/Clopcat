@@ -14,9 +14,6 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Clopcat-main # توجيه العمل للعمل داخل مجلد الفلاتر الصحيح
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -26,19 +23,28 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Enable Web Platform
-        run: flutter config --enable-web
-
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Build Flutter Web
-        run: flutter build web --base-href "/${{ github.event.repository.name }}/"
+      - name: Detect Flutter Project Root and Build
+        run: |
+          # البحث التلقائي عن المجلد الذي يحتوي على ملف pubspec.yaml
+          FLUTTER_ROOT=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
+          echo "🚀 تم العثور على مشروع Flutter في المسار: $FLUTTER_ROOT"
+          cd "$FLUTTER_ROOT"
+          
+          echo "📦 تهيئة منصة الويب وتثبيت الحزم..."
+          flutter config --enable-web
+          flutter pub get
+          
+          echo "🏗️ جاري بناء نسخة الويب التجريبية للتطبيق..."
+          flutter build web --base-href "/${{ github.event.repository.name }}/"
+          
+          # نقل مخرجات البناء إلى مجلد خارجي ثابت لضمان رفعه بنجاح
+          mkdir -p ../final_web_build
+          cp -r build/web/* ../final_web_build/
 
       - name: Upload Artifacts
         uses: actions/upload-pages-artifact@v3
         with:
-          path: Clopcat-main/build/web # رفع المخرجات من المجلد الصحيح
+          path: final_web_build # رفع المخرجات الجاهزة من المسار الثابت
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
