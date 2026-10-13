@@ -23,28 +23,28 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Detect Flutter Project Root and Build
+      - name: Detect and Build Flutter Project
         run: |
-          # البحث التلقائي عن المجلد الذي يحتوي على ملف pubspec.yaml
-          FLUTTER_ROOT=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
-          echo "🚀 تم العثور على مشروع Flutter في المسار: $FLUTTER_ROOT"
-          cd "$FLUTTER_ROOT"
+          # العثور على المسار الحقيقي لملف pubspec.yaml والتحرك إليه بدقة وثبات
+          FLUTTER_PATH=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
+          echo "🚀 تم رصد مشروع Flutter في المسار: $FLUTTER_PATH"
           
-          echo "📦 تهيئة منصة الويب وتثبيت الحزم..."
+          # الدخول للمسار وتنفيذ أوامر التهيئة وجلب الحزم
+          cd "$FLUTTER_PATH"
           flutter config --enable-web
           flutter pub get
           
-          echo "🏗️ جاري بناء نسخة الويب التجريبية للتطبيق..."
+          # بناء منصة الويب بالمعاملات الصحيحة للمستودع
           flutter build web --base-href "/${{ github.event.repository.name }}/"
           
-          # نقل مخرجات البناء إلى مجلد خارجي ثابت لضمان رفعه بنجاح
-          mkdir -p ../final_web_build
-          cp -r build/web/* ../final_web_build/
+          # إنشاء مجلد مخرجات ثابت ومطلق لضمان نجاح الرفع دون فقدان المسار
+          mkdir -p "${{ github.workspace }}/final_web_build"
+          cp -r build/web/* "${{ github.workspace }}/final_web_build/"
 
       - name: Upload Artifacts
         uses: actions/upload-pages-artifact@v3
         with:
-          path: final_web_build # رفع المخرجات الجاهزة من المسار الثابت
+          path: final_web_build
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
