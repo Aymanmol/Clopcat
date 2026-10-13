@@ -1,0 +1,44 @@
+name: "تحديثات مكتبات الميديا والـ FFmpeg التلقائية"
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # يعمل السكربت تلقائياً مرة واحدة كل أسبوع (يوم الاثنين) لضمان استقرار البناء
+  workflow_dispatch: # يتيح لك تشغيل الفحص يدوياً في أي وقت من واجهة جيتهاب
+
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Fetch Latest Media3 Version
+        id: media3_check
+        run: |
+          LATEST_MEDIA3=\$(curl -s https://maven.org\&rows=1\&wt=json | jq -r '.response.docs[0].v')
+          echo "أحدث إصدار متوفر لـ Media3 هو: \$LATEST_MEDIA3"
+          echo "latest_version=\(LATEST_MEDIA3" >> \)GITHUB_OUTPUT
+
+      - name: Fetch Latest Mobile FFmpeg Version
+        id: ffmpeg_check
+        run: |
+          LATEST_FFMPEG=\$(curl -s https://github.com | jq -r '.tag_name')
+          echo "أحدث إصدار متوفر لحزمة FFmpeg للهواتف هو: \$LATEST_FFMPEG"
+          echo "latest_version=\(LATEST_FFMPEG" >> \)GITHUB_OUTPUT
+
+      - name: Create Alert Issue if Updates Found
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const media3 = "\${{ steps.media3_check.outputs.latest_version }}";
+            const ffmpeg = "\${{ steps.ffmpeg_check.outputs.latest_version }}";
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚀 تحديثات برمجية متوفرة لمحرر الفيديو (Media3 & FFmpeg)',
+              body: `تم رصد إصدارات جديدة للاعتماديات الأساسية لتطبيق تحرير الفيديو لضمان كفاءة التصدير:\n\n` +
+                    `- **Google Media3:** ${media3}\n` +
+                    `- **FFmpeg Kit Mobile:** ${ffmpeg}\n\n` +
+                    `يرجى مراجعة التحديثات وتحديث ملفات البناء وتجربتها محلياً عبر Termux لضمان عدم تعارض كود معالجة الطبقات.`
+            });
