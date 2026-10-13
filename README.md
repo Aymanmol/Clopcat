@@ -3,10 +3,10 @@
 ## Build
 Requires the Flutter SDK (stable), Java 17, Android Studio, and Xcode for iOS.
 
-    tools/bootstrap.sh          # generates ./build_app with the native settings applied
+    tools/bootstrap.sh
     cd build_app
     flutter analyze
-    flutter run --release       # on a real device
+    flutter run --release
 
 Or push to GitHub and the `build` workflow runs analyze plus Android and iOS builds.
 
