@@ -27,56 +27,35 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Force Project Re-Creation and Cloud Build
+      - name: Force Absolute Cloud Build
         run: |
-          echo "🏗️ جاري تهيئة وإجبار بناء الهيكل التأسيسي السحابي للتطبيق..."
+          echo "🏗️ تهيئة مشروع الويب في مسار مطلق..."
           
-          # إجبار الخادم على بناء مشروع فلاتر ويب أصيل ومتكامل من الصفر في مسار منفصل
-          cd ..
-          flutter create --platforms web --org com.aymanmol.clopcat clopcat_web_project
-          cd clopcat_web_project
+          # إنشاء مجلد البناء المستقل داخل مسار الجيت هاب الثابت
+          cd ${{ github.workspace }}
+          flutter create --platforms web --org com.aymanmol.clopcat target_web_project
           
-          # نقل واجهات المحرر، التايملاين، واستوديو الذكاء الاصطناعي التي برمجناها إلى المشروع الجديد
-          mkdir -p lib/models lib/widgets lib/services
-          
-          if [ -d "../Clopcat/lib" ]; then
-            cp -r ../Clopcat/lib/* ./lib/ 2>/dev/null || true
+          # نقل كافة ملفات البرمجة التي أنشأناها (التايملاين، الـ AI Studio، الـ Services) إلى المشروع الجديد
+          if [ -d "lib" ]; then
+            cp -r lib/* target_web_project/lib/ 2>/dev/null || true
           fi
           
-          # إعادة كتابة الملف الرئيسي لضمان توجيه الشاشات بشكل صحيح وبدون أخطاء استيراد
-          cat << 'INNER_EOF' > lib/main.dart
-          import 'package:flutter/material.dart';
-          
-          void main() {
-            runApp(const MaterialApp(
-              home: Scaffold(
-                backgroundColor: Color(0xFF121212),
-                body: Center(
-                  child: Text(
-                    'CapCut Premium Clone\nتم البناء والتشغيل بنجاح سحابياً 🚀',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-              debugShowCheckedModeBanner: false,
-            ));
-          }
-          INNER_EOF
-          
-          echo "📦 جاري تثبيت الحزم والبناء النهائي للويب..."
+          # الدخول للمشروع الجديد وبنائه
+          cd target_web_project
           flutter config --enable-web
           flutter pub get
           flutter build web --base-href "/${{ github.event.repository.name }}/"
           
-          # عزل المخرجات الجاهزة تماماً للنشر المنفرد
-          mkdir -p ../clean_web_output
-          cp -r build/web/* ../clean_web_output/
+          # إنشاء مجلد المخرجات النهائي في المسار الرئيسي المطلق ونقل الملفات إليه
+          mkdir -p ${{ github.workspace }}/clean_web_output
+          cp -r build/web/* ${{ github.workspace }}/clean_web_output/
+          
+          echo "✅ اكتمل البناء السحابي ونقل الملفات بنجاح."
 
       - name: Upload Single Production Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: clean_web_output
+          path: ${{ github.workspace }}/clean_web_output
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
