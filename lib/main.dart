@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show File, Directory;
 import 'dart:math';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
@@ -16,8 +17,6 @@ void main() => runApp(MaterialApp(
       home: const Editor(),
     ));
 
-/// One timeline clip: a trimmed range of a source file plus per-clip settings.
-/// (Renamed from `Clip`, which collides with Flutter's own `Clip` enum.)
 class EditClip {
   EditClip(this.path, this.srcMs) : endMs = srcMs;
   factory EditClip.fromJson(Map<String, dynamic> j) => EditClip(j['path'] as String, j['srcMs'] as int)
@@ -42,8 +41,6 @@ class EditClip {
 
 String fmt(int ms) => '${(ms / 1000).toStringAsFixed(1)}s';
 
-/// A text overlay on the project timeline (project time = after clip speed is applied).
-/// x, y are the text CENTER as a fraction of the frame; size is a fraction of frame height.
 class TextLayer {
   TextLayer(this.text, this.startMs, this.endMs);
   factory TextLayer.fromJson(Map<String, dynamic> j) =>
@@ -67,7 +64,7 @@ class Editor extends StatefulWidget {
 }
 
 class _EditorState extends State<Editor> {
-  static const ch = MethodChannel('cutline/export'); // native Media3 / AVFoundation export
+  static const ch = MethodChannel('cutline/export');
   final clips = <EditClip>[];
   final _undo = <String>[], _redo = <String>[];
   final texts = <TextLayer>[];
@@ -86,12 +83,15 @@ class _EditorState extends State<Editor> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
   }
 
-  // ---- persistence: autosave after every edit, restore on launch ----
   Future<void> _boot() async {
-    final dir = await getApplicationDocumentsDirectory();
-    _store = File(p.join(dir.path, 'project.json'));
     try {
-      if (await _store!.exists()) {
+      if (!kIsWeb) {
+        final dir = await getApplicationDocumentsDirectory();
+        _store = File(p.join(dir.path, 'project.json'));
+      } else {
+        _store = null;
+      }
+      if (!kIsWeb && _store != null && await _store!.exists()) {
         final j = jsonDecode(await _store!.readAsString()) as Map<String, dynamic>;
         clips.addAll((j['clips'] as List)
             .map((e) => EditClip.fromJson(e as Map<String, dynamic>))
@@ -114,7 +114,12 @@ class _EditorState extends State<Editor> {
         'clips': clips.map((c) => c.toJson()).toList(),
         'texts': texts.map((t) => t.toJson()).toList(),
       });
-  void _save() => _store?.writeAsString(_dump());
+
+  void _save() {
+    if (kIsWeb) return;
+    _store?.writeAsString(_dump());
+  }
+
   void _snap() {
     _undo.add(_dump());
     if (_undo.length > 50) _undo.removeAt(0);
@@ -151,8 +156,38 @@ class _EditorState extends State<Editor> {
     await _restore(_redo.removeLast());
   }
 
-  // ---- import: copy into app storage so the file survives cache cleanup ----
   Future<void> add() async {
+    if (kIsWeb) {
+      final url = await showDialog<String>(
+        context: context,
+        builder: (ctx) {
+          final ctrl = TextEditingController();
+          return AlertDialog(
+            title: const Text('Video URL'),
+            content: TextField(controller: ctrl, decoration: const InputDecoration(hintText: 'https://...')),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Add')),
+            ],
+          );
+        },
+      );
+      if (url == null || url.isEmpty) return;
+      try {
+        final probe = VideoPlayerController.network(url);
+        await probe.initialize();
+        final ms = probe.value.duration.inMilliseconds;
+        await probe.dispose();
+        _snap();
+        clips.add(EditClip(url, ms));
+        _save();
+        await select(clips.length - 1);
+      } catch (e) {
+        msg('Import failed: $e');
+      }
+      return;
+    }
+
     final f = await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (f == null) return;
     try {
@@ -189,7 +224,11 @@ class _EditorState extends State<Editor> {
       await _drop();
       if (mounted) setState(() {});
       final c = clips[i];
-      n = VideoPlayerController.file(File(c.path));
+      if (kIsWeb && (c.path.startsWith('http://') || c.path.startsWith('https://'))) {
+        n = VideoPlayerController.network(c.path);
+      } else {
+        n = VideoPlayerController.file(File(c.path));
+      }
       await n.initialize();
       await n.setVolume(c.mute ? 0 : 1);
       await n.setPlaybackSpeed(c.speed);
@@ -206,7 +245,6 @@ class _EditorState extends State<Editor> {
     }
   }
 
-  /// Sequential preview: play each clip's trimmed range, then advance.
   void tick() {
     final v = vc;
     if (v == null || switching || sel >= clips.length) return;
@@ -271,7 +309,6 @@ class _EditorState extends State<Editor> {
 
   int get total => clips.fold<int>(0, (s, k) => s + k.outMs);
 
-  /// Playhead position on the project timeline (accounts for earlier clips, trims and speed).
   int get nowMs {
     final v = vc;
     if (v == null || clips.isEmpty || sel >= clips.length) return 0;
@@ -365,6 +402,10 @@ class _EditorState extends State<Editor> {
     setState(() => busy = true);
     await vc?.pause();
     try {
+      if (kIsWeb) {
+        msg('Export not supported on web in this simplified build.');
+        return;
+      }
       final dir = await getTemporaryDirectory();
       final out = '${dir.path}/cutline_${DateTime.now().millisecondsSinceEpoch}.mp4';
       final tot = total;
@@ -518,7 +559,6 @@ class _EditorState extends State<Editor> {
     );
   }
 
-  /// Text layers drawn over the preview. Drag to move, tap to edit.
   Widget _overlay() => LayoutBuilder(builder: (ctx, box) {
         final now = nowMs;
         return Stack(children: [
