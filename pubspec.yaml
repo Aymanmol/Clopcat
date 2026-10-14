@@ -1,24 +1,21 @@
 name: clopcat
-description: A trimmed/web-friendly version of Cutline for testing in Termux/web.
+description: A web-friendly, fixed version of the Clopcat editor for browser testing.
 publish_to: "none"
-version: 0.0.1
+version: 1.0.0+1
+
 environment:
-  sdk: ">=2.18.0 <4.0.0"
-  flutter: ">=3.0.0"
+  sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.2
-  video_player: ^2.5.0
-  path: ^1.8.2
-  path_provider: ^2.0.11
-  image_picker: ^0.8.7+4
+  video_player: ^2.16.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
